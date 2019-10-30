@@ -1,0 +1,16 @@
+{
+    "files.associations": {
+        "lpc8xx.h": "c",
+        "syscon.h": "c",
+        "delay.h": "c",
+        "iocon.h": "c",
+        "swm.h": "c",
+        "ctimer.h": "c",
+        "core_cm0plus.h": "c",
+        "stdarg.h": "c",
+        "spi.h": "c",
+        "fro.h": "c",
+        "rom_api.h": "c",
+        "chip_setup.h": "c"
+    }
+}

@@ -38,6 +38,8 @@
 #include <SPI.h>
 #include <WiFi.h>
 
+#include "ui.h"
+
 //
 // For normal use, we require that you edit the sketch to replace FILLMEIN
 // with values assigned by the TTN console. However, for regression tests,
@@ -72,9 +74,12 @@ void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 static uint8_t mydata[] = "Hello, world!";
 static osjob_t sendjob;
 
+void do_send(osjob_t* j);
+
+
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
-const unsigned TX_INTERVAL = 30;
+const unsigned TX_INTERVAL = 40;
 
 // Pin mapping
 const lmic_pinmap lmic_pins = {
@@ -84,12 +89,15 @@ const lmic_pinmap lmic_pins = {
   .dio = {26, 33, 32},
 };
 
-void do_send(osjob_t* j);
+static osjob_t displayjob;
+void display_update(osjob_t* j);
+ev_t last_ev = EV_JOINING; // just to put an initial state
 
 u1_t rssi = 0;
-int8_t rssid = 0;
+int16_t rssid = 0;
 
 void onEvent (ev_t ev) {
+    last_ev = ev;
     Serial.print(os_getTime());
     Serial.print(": ");
     switch(ev) {
@@ -107,6 +115,8 @@ void onEvent (ev_t ev) {
             break;
         case EV_JOINING:
             Serial.println(F("EV_JOINING"));
+            // Schedule display update
+            os_setTimedCallback(&displayjob, os_getTime()+sec2osticks(2), display_update);
             break;
         case EV_JOINED:
             Serial.println(F("EV_JOINED"));
@@ -135,6 +145,9 @@ void onEvent (ev_t ev) {
             // during join, but because slow data rates change max TX
 	    // size, we don't use it in this example.
             LMIC_setLinkCheckMode(0);
+
+            // Schedule display update
+            os_setTimedCallback(&displayjob, os_getTime()+sec2osticks(2), display_update);
             break;
         /*
         || This event is defined but not used in the code. No
@@ -154,8 +167,9 @@ void onEvent (ev_t ev) {
             Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
             if (LMIC.txrxFlags & TXRX_ACK) {
               Serial.println(F("Received ack"));
-              // 1B
-              hal_spi_read(0x1A & 0x7f, &rssi, 1);
+              // RegPktRssiValue 1A
+              // RegRssiValue 1B
+              hal_spi_read(0x1B /* & 0x7f */, &rssi, 1);
               rssid = rssi - (LMIC.freq < 869525000 ? 164 : 157);
               Serial.printf("ACK RSSI : %d\r\n", rssid);
             }
@@ -166,6 +180,8 @@ void onEvent (ev_t ev) {
             }
             // Schedule next transmission
             os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
+            // Schedule display update
+            os_setTimedCallback(&displayjob, os_getTime()+sec2osticks(2), display_update);
             break;
         case EV_LOST_TSYNC:
             Serial.println(F("EV_LOST_TSYNC"));
@@ -194,6 +210,9 @@ void onEvent (ev_t ev) {
         case EV_TXSTART:
             Serial.println(F("EV_TXSTART"));
             break;
+        case EV_JOIN_TXCOMPLETE:
+            Serial.println(F("EV_JOIN_TXCOMPLETE"));
+            break;
         default:
             Serial.print(F("Unknown event: "));
             Serial.println((unsigned) ev);
@@ -213,6 +232,37 @@ void do_send(osjob_t* j){
     // Next TX is scheduled after TX_COMPLETE event.
 }
 
+void display_update(osjob_t* j) {
+    u8x8.clearDisplay();
+    Serial.printf("Updating display with EV = %d\r\n", last_ev);
+    switch (last_ev) {
+        case EV_JOINING:
+            ui_set_state(UI_STATE_JOINING);
+            break;
+        case EV_JOINED:
+            ui_set_state(UI_STATE_JOINED);
+            break;
+        case EV_TXCOMPLETE:
+            u8x8.drawString(0, 10, "TXCOMPLETE");
+
+            if (LMIC.rssi > 30) {
+                // perfect
+                //Heltec.display->drawXbm(72, 14, LORA_RSSI_WIDTH, LORA_RSSI_HEIGHT, perfect_signal_adj);
+            } else if (LMIC.rssi > 20) {
+                // good
+                //Heltec.display->drawXbm(72, 14, LORA_RSSI_WIDTH, LORA_RSSI_HEIGHT, good_signal_adj);
+            } else {
+                // poor
+                //Heltec.display->drawXbm(72, 14, LORA_RSSI_WIDTH, LORA_RSSI_HEIGHT, poor_signal_adj);
+            }
+            /* if (LMIC.txrxFlags & TXRX_ACK) { */
+                Serial.printf("LMIC RSSI : %d dBm, SNR : %d\r\n", LMIC.rssi, LMIC.snr);
+            /* } */
+        default:
+            break;
+    }
+}
+
 void setup() {
     Serial.begin(9600);
     Serial.println(F("Starting"));
@@ -224,10 +274,15 @@ void setup() {
     delay(1000);
     #endif
 
+    ui_init();
+
     // LMIC init
     os_init();
     // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
+    
+    // Start job (diplay updating)
+    display_update(&displayjob);
 
     // Start job (sending automatically starts OTAA too)
     do_send(&sendjob);
