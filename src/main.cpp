@@ -38,7 +38,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 
-#include "ui.h"
+#include "ui.hpp"
 
 //
 // For normal use, we require that you edit the sketch to replace FILLMEIN
@@ -93,8 +93,7 @@ static osjob_t displayjob;
 void display_update(osjob_t* j);
 ev_t last_ev = EV_JOINING; // just to put an initial state
 
-u1_t rssi = 0;
-int16_t rssid = 0;
+UI ui;
 
 void onEvent (ev_t ev) {
     last_ev = ev;
@@ -126,11 +125,11 @@ void onEvent (ev_t ev) {
               u1_t nwkKey[16];
               u1_t artKey[16];
               LMIC_getSessionKeys(&netid, &devaddr, nwkKey, artKey);
-              Serial.print("netid: ");
+              Serial.print(F("netid: "));
               Serial.println(netid, DEC);
-              Serial.print("devaddr: ");
+              Serial.print(F("devaddr: "));
               Serial.println(devaddr, HEX);
-              Serial.print("artKey: ");
+              Serial.print(F("artKey: "));
               for (size_t i=0; i<sizeof(artKey); ++i) {
                 Serial.print(artKey[i], HEX);
               }
@@ -167,11 +166,6 @@ void onEvent (ev_t ev) {
             Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
             if (LMIC.txrxFlags & TXRX_ACK) {
               Serial.println(F("Received ack"));
-              // RegPktRssiValue 1A
-              // RegRssiValue 1B
-              hal_spi_read(0x1B /* & 0x7f */, &rssi, 1);
-              rssid = rssi - (LMIC.freq < 869525000 ? 164 : 157);
-              Serial.printf("ACK RSSI : %d\r\n", rssid);
             }
             if (LMIC.dataLen) {
               Serial.print(F("Received "));
@@ -233,33 +227,20 @@ void do_send(osjob_t* j){
 }
 
 void display_update(osjob_t* j) {
-    u8x8.clearDisplay();
     Serial.printf("Updating display with EV = %d\r\n", last_ev);
     switch (last_ev) {
         case EV_JOINING:
-            ui_set_state(UI_STATE_JOINING);
+            ui.set_state(UI_STATE_JOINING);
             break;
         case EV_JOINED:
-            ui_set_state(UI_STATE_JOINED);
+            ui.set_state(UI_STATE_JOINED);
             break;
         case EV_TXCOMPLETE:
-            u8x8.drawString(0, 10, "TXCOMPLETE");
+            ui.set_state(UI_STATE_TXCOMPLETED);
 
-            if (LMIC.rssi > 30) {
-                // perfect
-                //Heltec.display->drawXbm(72, 14, LORA_RSSI_WIDTH, LORA_RSSI_HEIGHT, perfect_signal_adj);
-            } else if (LMIC.rssi > 20) {
-                // good
-                //Heltec.display->drawXbm(72, 14, LORA_RSSI_WIDTH, LORA_RSSI_HEIGHT, good_signal_adj);
-            } else {
-                // poor
-                //Heltec.display->drawXbm(72, 14, LORA_RSSI_WIDTH, LORA_RSSI_HEIGHT, poor_signal_adj);
-            }
+            ui.set_signal_values(LMIC.rssi, LMIC.snr);
             /* if (LMIC.txrxFlags & TXRX_ACK) { */
-                Serial.printf("LMIC RSSI : %d dBm, SNR : %d\r\n", LMIC.rssi, LMIC.snr);
             /* } */
-        default:
-            break;
     }
 }
 
@@ -273,8 +254,6 @@ void setup() {
     digitalWrite(VCC_ENABLE, HIGH);
     delay(1000);
     #endif
-
-    ui_init();
 
     // LMIC init
     os_init();

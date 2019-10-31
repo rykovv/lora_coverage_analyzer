@@ -11,6 +11,14 @@
         "spi.h": "c",
         "fro.h": "c",
         "rom_api.h": "c",
-        "chip_setup.h": "c"
+        "chip_setup.h": "c",
+        "ui.h": "c",
+        "array": "cpp",
+        "deque": "cpp",
+        "string": "cpp",
+        "unordered_map": "cpp",
+        "unordered_set": "cpp",
+        "vector": "cpp",
+        "initializer_list": "cpp"
     }
 }
