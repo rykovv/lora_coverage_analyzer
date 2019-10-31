@@ -40,6 +40,11 @@
 
 #include "ui.hpp"
 
+#define GPS_RX_PIN  21
+#define GPS_TX_PIN  22
+
+HardwareSerial Serial1(2);
+
 //
 // For normal use, we require that you edit the sketch to replace FILLMEIN
 // with values assigned by the TTN console. However, for regression tests,
@@ -247,6 +252,8 @@ void display_update(osjob_t* j) {
 void setup() {
     Serial.begin(9600);
     Serial.println(F("Starting"));
+
+    Serial1.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 
     #ifdef VCC_ENABLE
     // For Pinoccio Scout boards
