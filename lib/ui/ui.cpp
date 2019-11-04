@@ -22,6 +22,8 @@ UI::UI(void) {
 void UI::set_state(ui_state_t ui_state) {
     char msg[32] = "";
 
+    u8x8.clearLine(0);
+
     switch (ui_state) {
         case UI_STATE_JOINING:
             strncpy_P(msg, (PGM_P)("JOINING"), 32);
@@ -30,10 +32,10 @@ void UI::set_state(ui_state_t ui_state) {
             strncpy_P(msg, (PGM_P)("JOINED"), 32);
             break;
         case UI_STATE_TXCOMPLETED:
-            strncpy_P(msg, (PGM_P)("TXCOMPLETED"), 32);
+            strncpy_P(msg, (PGM_P)("TX COMPLETED"), 32);
             break;
         case UI_STATE_ACK_RECEIVED:
-            strncpy_P(msg, (PGM_P)("ACK_RECEIVED"), 32);
+            strncpy_P(msg, (PGM_P)("ACK RECEIVED"), 32);
             break;
     }
 
@@ -59,6 +61,8 @@ void UI::set_signal_values(int16_t rssi, int16_t snr) {
 void UI::set_gps_status(ui_gps_status_t ui_gps_status) {
     char msg[32] = "";
 
+    u8x8.clearLine(u8x8.getRows()-1);
+
     switch (ui_gps_status) {
     case UI_GPS_STATUS_NO_SIGNAL :
         strncpy_P(msg, (PGM_P)("NO GPS DATA"), 32);
@@ -66,11 +70,17 @@ void UI::set_gps_status(ui_gps_status_t ui_gps_status) {
     case UI_GPS_STATUS_TAKING_DATA :
         strncpy_P(msg, (PGM_P)("TAKING GPS DATA"), 32);
         break;
+    case UI_GPS_STATUS_DATA_TAKEN :
+        strncpy_P(msg, (PGM_P)("GPS DATA TAKEN"), 32);
+        break;
     case UI_GPS_STATUS_SENT :
         strncpy_P(msg, (PGM_P)("GPS DATA SENT"), 32);
         break;
     case UI_GPS_STATUS_CONFIRMED :
-        strncpy_P(msg, (PGM_P)("GPS DATA CONFIRMED"), 32);
+        strncpy_P(msg, (PGM_P)("GPS ST CONFIRMED"), 32);
+        break;
+    case UI_GPS_STATUS_TIMEOUT :
+        strncpy_P(msg, (PGM_P)("GPS READ TIMEOUT"), 32);
         break;
     }
     u8x8.drawString(0, u8x8.getRows()-1, msg);

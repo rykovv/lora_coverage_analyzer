@@ -40,10 +40,14 @@
 
 #include "ui.hpp"
 
+#include "TinyGPS++.h"
+
 #define GPS_RX_PIN  21
 #define GPS_TX_PIN  22
+#define GPS_UART_READ_TIMEOUT   5000
 
-HardwareSerial Serial1(2);
+HardwareSerial gps_serial(2);
+TinyGPSPlus gps;
 
 //
 // For normal use, we require that you edit the sketch to replace FILLMEIN
@@ -76,7 +80,7 @@ void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
 static const u1_t PROGMEM APPKEY[16] = { 0x33, 0x37, 0x73, 0x06, 0x14, 0xC9, 0xEB, 0x2B, 0xEE, 0xA5, 0xB5, 0xD6, 0x83, 0xFF, 0x3D, 0x7D };
 void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 
-static uint8_t mydata[] = "Hello, world!";
+static uint8_t mydata[64] = "-1#-1#-1#-1";
 static osjob_t sendjob;
 
 void do_send(osjob_t* j);
@@ -96,12 +100,15 @@ const lmic_pinmap lmic_pins = {
 
 static osjob_t displayjob;
 void display_update(osjob_t* j);
-ev_t last_ev = EV_JOINING; // just to put an initial state
+static ev_t ev_state = EV_JOINING; // just to put an initial state
 
 UI ui;
 
+static osjob_t gpsjob;
+void gps_update(osjob_t* j);
+
 void onEvent (ev_t ev) {
-    last_ev = ev;
+    ev_state = ev;
     Serial.print(os_getTime());
     Serial.print(": ");
     switch(ev) {
@@ -151,7 +158,9 @@ void onEvent (ev_t ev) {
             LMIC_setLinkCheckMode(0);
 
             // Schedule display update
-            os_setTimedCallback(&displayjob, os_getTime()+sec2osticks(2), display_update);
+            os_setTimedCallback(&displayjob, os_getTime()+sec2osticks(1), display_update);
+            // Schedule GPS update
+            os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(2), gps_update);
             break;
         /*
         || This event is defined but not used in the code. No
@@ -177,8 +186,11 @@ void onEvent (ev_t ev) {
               Serial.print(LMIC.dataLen);
               Serial.println(F(" bytes of payload"));
             }
+
             // Schedule next transmission
             os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
+            // Schedule next transmission
+            os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(TX_INTERVAL-10), gps_update);
             // Schedule display update
             os_setTimedCallback(&displayjob, os_getTime()+sec2osticks(2), display_update);
             break;
@@ -225,15 +237,16 @@ void do_send(osjob_t* j){
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
         // Prepare upstream data transmission at the next possible time.
-        LMIC_setTxData2(11, mydata, sizeof(mydata)-1, 1);
+        LMIC_setTxData2(10, mydata, strlen((char *)mydata), 1);
         Serial.println(F("Packet queued"));
     }
     // Next TX is scheduled after TX_COMPLETE event.
 }
 
 void display_update(osjob_t* j) {
-    Serial.printf("Updating display with EV = %d\r\n", last_ev);
-    switch (last_ev) {
+    Serial.printf("Updating display with EV = %d\r\n", ev_state);
+
+    switch (ev_state) {
         case EV_JOINING:
             ui.set_state(UI_STATE_JOINING);
             break;
@@ -241,11 +254,42 @@ void display_update(osjob_t* j) {
             ui.set_state(UI_STATE_JOINED);
             break;
         case EV_TXCOMPLETE:
-            ui.set_state(UI_STATE_TXCOMPLETED);
+            if (LMIC.txrxFlags & TXRX_ACK) {
+                ui.set_state(UI_STATE_ACK_RECEIVED);
+                ui.set_gps_status(UI_GPS_STATUS_CONFIRMED);
+            } else {
+                ui.set_gps_status(UI_GPS_STATUS_SENT);
+                ui.set_state(UI_STATE_TXCOMPLETED);
+            }
 
             ui.set_signal_values(LMIC.rssi, LMIC.snr);
-            /* if (LMIC.txrxFlags & TXRX_ACK) { */
-            /* } */
+            break;
+    }
+}
+
+void gps_update(osjob_t* j) {
+    ui.set_gps_status(UI_GPS_STATUS_TAKING_DATA);
+
+    uint32_t gps_read_start = millis();
+    uint8_t timeout_ok = 1;
+
+    while (!gps.location.isUpdated() && (timeout_ok = (millis() - gps_read_start) < GPS_UART_READ_TIMEOUT)) {
+        if (gps_serial.available()) {
+            gps.encode(gps_serial.read());
+        }
+    }
+
+    snprintf((char *)mydata, sizeof(mydata), "%d#%d#%.6f#%.6f", LMIC.rssi, 
+                                                                LMIC.snr, 
+                                                                gps.location.lat(), 
+                                                                gps.location.lng());
+
+    Serial.println((char *)mydata);
+
+    if (timeout_ok) {
+        ui.set_gps_status(UI_GPS_STATUS_DATA_TAKEN);
+    } else {
+        ui.set_gps_status(UI_GPS_STATUS_TIMEOUT);
     }
 }
 
@@ -253,7 +297,7 @@ void setup() {
     Serial.begin(9600);
     Serial.println(F("Starting"));
 
-    Serial1.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    gps_serial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
 
     #ifdef VCC_ENABLE
     // For Pinoccio Scout boards
@@ -266,7 +310,7 @@ void setup() {
     os_init();
     // Reset the MAC state. Session and pending data transfers will be discarded.
     LMIC_reset();
-    
+
     // Start job (diplay updating)
     display_update(&displayjob);
 

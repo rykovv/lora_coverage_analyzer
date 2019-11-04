@@ -18,8 +18,10 @@ typedef enum {
 typedef enum {
     UI_GPS_STATUS_NO_SIGNAL = 0,
     UI_GPS_STATUS_TAKING_DATA,
+    UI_GPS_STATUS_DATA_TAKEN,
     UI_GPS_STATUS_SENT,
-    UI_GPS_STATUS_CONFIRMED
+    UI_GPS_STATUS_CONFIRMED,
+    UI_GPS_STATUS_TIMEOUT,
 } ui_gps_status_t;
 
 class UI {
