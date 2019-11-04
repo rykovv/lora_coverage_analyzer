@@ -220,6 +220,11 @@ void onEvent (ev_t ev) {
         */
         case EV_TXSTART:
             Serial.println(F("EV_TXSTART"));
+            if (LMIC.netid) {
+                // Schedule display update
+                //Serial.println(F("EV_TXSTART display updated scheduled"));
+                os_setTimedCallback(&displayjob, os_getTime()+sec2osticks(1), display_update);
+            }
             break;
         case EV_JOIN_TXCOMPLETE:
             Serial.println(F("EV_JOIN_TXCOMPLETE"));
@@ -252,6 +257,9 @@ void display_update(osjob_t* j) {
             break;
         case EV_JOINED:
             ui.set_state(UI_STATE_JOINED);
+            break;
+        case EV_TXSTART:
+            ui.set_state(UI_STATE_TXSTART);
             break;
         case EV_TXCOMPLETE:
             if (LMIC.txrxFlags & TXRX_ACK) {

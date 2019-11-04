@@ -31,8 +31,11 @@ void UI::set_state(ui_state_t ui_state) {
         case UI_STATE_JOINED:
             strncpy_P(msg, (PGM_P)("JOINED"), 32);
             break;
+        case UI_STATE_TXSTART:
+            strncpy_P(msg, (PGM_P)("DATAUP START"), 32);
+            break; 
         case UI_STATE_TXCOMPLETED:
-            strncpy_P(msg, (PGM_P)("TX COMPLETED"), 32);
+            strncpy_P(msg, (PGM_P)("DATAUP COMPLETED"), 32);
             break;
         case UI_STATE_ACK_RECEIVED:
             strncpy_P(msg, (PGM_P)("ACK RECEIVED"), 32);
