@@ -11,6 +11,7 @@ U8X8_SSD1306_128X64_NONAME_SW_I2C u8x8(SSD1306_SCL_PIN, SSD1306_SDA_PIN, SSD1306
 
 static void _ui_set_lora_bar(ui_lora_bar_t ui_lora_bar);
 static uint8_t _takes_chars(int16_t num);
+static inline uint8_t _small_fmt_needed(int16_t rssi, int16_t snr);
 
 UI::UI(void) {
     u8x8.begin();
@@ -26,19 +27,19 @@ void UI::set_state(ui_state_t ui_state) {
 
     switch (ui_state) {
         case UI_STATE_JOINING:
-            strncpy_P(msg, (PGM_P)("JOINING"), 32);
+            strncpy_P(msg, (PGM_P)F("JOINING"), 32);
             break;
         case UI_STATE_JOINED:
-            strncpy_P(msg, (PGM_P)("JOINED"), 32);
+            strncpy_P(msg, (PGM_P)F("JOINED"), 32);
             break;
         case UI_STATE_TXSTART:
-            strncpy_P(msg, (PGM_P)("DATAUP START"), 32);
+            strncpy_P(msg, (PGM_P)F("DATAUP START"), 32);
             break; 
         case UI_STATE_TXCOMPLETED:
-            strncpy_P(msg, (PGM_P)("DATAUP COMPLETED"), 32);
+            strncpy_P(msg, (PGM_P)F("DATAUP COMPLETED"), 32);
             break;
         case UI_STATE_ACK_RECEIVED:
-            strncpy_P(msg, (PGM_P)("ACK RECEIVED"), 32);
+            strncpy_P(msg, (PGM_P)F("ACK RECEIVED"), 32);
             break;
     }
 
@@ -46,9 +47,16 @@ void UI::set_state(ui_state_t ui_state) {
 }
 
 void UI::set_signal_values(int16_t rssi, int16_t snr) {
-    char vals[16] = "";
+    char vals[16];
+    memset(vals, ' ', 11);
+    vals[11] = '\0';
+    u8x8.draw1x2String(2, 4, vals);
     // TODO: adjust character shift
-    snprintf(vals, 11, "%d  .  %d", rssi, snr);
+    if (_small_fmt_needed(rssi, snr)) {
+        sprintf_P(vals, (PGM_P)F("%d  .  %d"), rssi, snr);
+    } else {
+        snprintf_P(vals, 11, (PGM_P)F("%d . %d"), rssi, snr);
+    }
     u8x8.draw1x2String(2, 4, vals);
 
     if (rssi > 30) {
@@ -68,22 +76,22 @@ void UI::set_gps_status(ui_gps_status_t ui_gps_status) {
 
     switch (ui_gps_status) {
     case UI_GPS_STATUS_NO_SIGNAL :
-        strncpy_P(msg, (PGM_P)("NO GPS DATA"), 32);
+        strncpy_P(msg, (PGM_P)F("NO GPS DATA"), 32);
         break;
     case UI_GPS_STATUS_TAKING_DATA :
-        strncpy_P(msg, (PGM_P)("TAKING GPS DATA"), 32);
+        strncpy_P(msg, (PGM_P)F("TAKING GPS DATA"), 32);
         break;
     case UI_GPS_STATUS_DATA_TAKEN :
-        strncpy_P(msg, (PGM_P)("GPS DATA TAKEN"), 32);
+        strncpy_P(msg, (PGM_P)F("GPS DATA TAKEN"), 32);
         break;
     case UI_GPS_STATUS_SENT :
-        strncpy_P(msg, (PGM_P)("GPS DATA SENT"), 32);
+        strncpy_P(msg, (PGM_P)F("GPS DATA SENT"), 32);
         break;
     case UI_GPS_STATUS_CONFIRMED :
-        strncpy_P(msg, (PGM_P)("GPS ST CONFIRMED"), 32);
+        strncpy_P(msg, (PGM_P)F("GPS ST CONFIRMED"), 32);
         break;
     case UI_GPS_STATUS_TIMEOUT :
-        strncpy_P(msg, (PGM_P)("GPS READ TIMEOUT"), 32);
+        strncpy_P(msg, (PGM_P)F("GPS READ TIMEOUT"), 32);
         break;
     }
     u8x8.drawString(0, u8x8.getRows()-1, msg);
@@ -111,6 +119,10 @@ static uint8_t _takes_chars(int16_t num) {
     }
 
     return res;
+}
+
+static inline uint8_t _small_fmt_needed(int16_t rssi, int16_t snr) {
+    return (_takes_chars(rssi) + _takes_chars(snr) < 5);
 }
 
 static void _ui_set_lora_bar(ui_lora_bar_t ui_lora_bar) {
