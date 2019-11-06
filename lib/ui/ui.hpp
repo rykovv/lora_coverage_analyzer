@@ -41,8 +41,6 @@ class UI {
     public :
         UI(void);
 
-        void init(void);
-
         void set_state(ui_state_t ui_state);
 
         void set_signal_values(int16_t rssi, int16_t snr);

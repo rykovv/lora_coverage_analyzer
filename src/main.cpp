@@ -96,10 +96,6 @@ const lmic_pinmap lmic_pins = {
   .dio = {26, 33, 32},
 };
 
-static osjob_t displayjob;
-void display_update(osjob_t* j);
-static ev_t ev_state = EV_JOINING; // just to put an initial state
-
 UI ui;
 
 static osjob_t gpsjob;
@@ -109,11 +105,11 @@ typedef struct {
     float lat = -1.0;
     float lng = -1.0;
     uint8_t updated = 0;
+    uint8_t sent = 0;
 } gps_data_t;
 gps_data_t gps_reg;
 
 void onEvent (ev_t ev) {
-    ev_state = ev;
     Serial.print(os_getTime());
     Serial.print(": ");
     switch(ev) {
@@ -132,7 +128,7 @@ void onEvent (ev_t ev) {
         case EV_JOINING:
             Serial.println(F("EV_JOINING"));
             // Schedule display update
-            os_setTimedCallback(&displayjob, os_getTime()+sec2osticks(2), display_update);
+            ui.set_state(UI_STATE_JOINING);
             break;
         case EV_JOINED:
             Serial.println(F("EV_JOINED"));
@@ -163,9 +159,9 @@ void onEvent (ev_t ev) {
             LMIC_setLinkCheckMode(0);
 
             // Schedule display update
-            os_setTimedCallback(&displayjob, os_getTime()+sec2osticks(1), display_update);
+            ui.set_state(UI_STATE_JOINED);
             // Schedule GPS update
-            os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(2), gps_update);
+            os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(1), gps_update);
             break;
         /*
         || This event is defined but not used in the code. No
@@ -184,20 +180,34 @@ void onEvent (ev_t ev) {
         case EV_TXCOMPLETE:
             Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
             if (LMIC.txrxFlags & TXRX_ACK) {
-              Serial.println(F("Received ack"));
+                Serial.println(F("Received ack"));
+                ui.set_state(UI_STATE_ACK_RECEIVED);
+                if (gps_reg.sent) {
+                    gps_reg.sent = 0;
+                    ui.set_gps_status(UI_GPS_STATUS_CONFIRMED);
+                }
+            } else {
+                ui.set_state(UI_STATE_TXCOMPLETED);
+                if (gps_reg.updated) {
+                    gps_reg.sent = 1;
+                    gps_reg.updated = 0;
+
+                    ui.set_gps_status(UI_GPS_STATUS_SENT);
+                }
             }
+
             if (LMIC.dataLen) {
-              Serial.print(F("Received "));
-              Serial.print(LMIC.dataLen);
-              Serial.println(F(" bytes of payload"));
+                Serial.print(F("Received "));
+                Serial.print(LMIC.dataLen);
+                Serial.println(F(" bytes of payload"));
             }
+
+            ui.set_signal_values(LMIC.rssi, LMIC.snr);
 
             // Schedule next transmission
             os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
             // Schedule gps update 1 second before next transmission
             os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(TX_INTERVAL-1), gps_update);
-            // Schedule display update
-            os_setTimedCallback(&displayjob, os_getTime()+sec2osticks(2), display_update);
             break;
         case EV_LOST_TSYNC:
             Serial.println(F("EV_LOST_TSYNC"));
@@ -227,8 +237,7 @@ void onEvent (ev_t ev) {
             Serial.println(F("EV_TXSTART"));
             if (LMIC.netid) {
                 // Schedule display update
-                //Serial.println(F("EV_TXSTART display updated scheduled"));
-                os_setTimedCallback(&displayjob, os_getTime()+sec2osticks(1), display_update);
+                ui.set_state(UI_STATE_TXSTART);
             }
             break;
         case EV_JOIN_TXCOMPLETE:
@@ -247,9 +256,8 @@ void do_send(osjob_t* j){
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
         // Prepare upstream data transmission at the next possible time.
-        // There is no transmission if there is no gps data. Only display update.
+        uint8_t mydata[64] = "-1#-1#-1#-1";
         if (gps_reg.updated) {
-            uint8_t mydata[64] = "-1#-1#-1#-1";
             snprintf_P((char *)mydata, sizeof(mydata), (PGM_P)F("%d#%d#%.6f#%.6f"), 
                                                                         LMIC.rssi, 
                                                                         LMIC.snr, 
@@ -257,41 +265,12 @@ void do_send(osjob_t* j){
                                                                         gps_reg.lng);
 
             Serial.println((char *)mydata);
-
-            LMIC_setTxData2(10, mydata, strlen((char *)mydata), 1);
-            Serial.println(F("Packet queued"));
-            
-            gps_reg.updated = 0;
         }
+        //              port                                ack required
+        LMIC_setTxData2(10, mydata, strlen((char *)mydata), 1);
+        Serial.println(F("Packet queued"));
     }
     // Next TX is scheduled after TX_COMPLETE event.
-}
-
-void display_update(osjob_t* j) {
-    Serial.printf("Updating display with EV = %d\r\n", ev_state);
-
-    switch (ev_state) {
-        case EV_JOINING:
-            ui.set_state(UI_STATE_JOINING);
-            break;
-        case EV_JOINED:
-            ui.set_state(UI_STATE_JOINED);
-            break;
-        case EV_TXSTART:
-            ui.set_state(UI_STATE_TXSTART);
-            break;
-        case EV_TXCOMPLETE:
-            if (LMIC.txrxFlags & TXRX_ACK) {
-                ui.set_state(UI_STATE_ACK_RECEIVED);
-                ui.set_gps_status(UI_GPS_STATUS_CONFIRMED);
-            } else {
-                ui.set_gps_status(UI_GPS_STATUS_SENT);
-                ui.set_state(UI_STATE_TXCOMPLETED);
-            }
-
-            ui.set_signal_values(LMIC.rssi, LMIC.snr);
-            break;
-    }
 }
 
 void gps_update(osjob_t* j) {
@@ -346,9 +325,6 @@ void setup() {
     LMIC_setupChannel(6, 867700000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
     LMIC_setupChannel(7, 867900000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
     LMIC_setupChannel(8, 868800000, DR_RANGE_MAP(DR_FSK,  DR_FSK),  BAND_MILLI);      // g2-band
-
-    // Start job (diplay updating)
-    display_update(&displayjob);
 
     // Start job (sending automatically starts OTAA too)
     do_send(&sendjob);
