@@ -80,9 +80,7 @@ void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
 static const u1_t PROGMEM APPKEY[16] = { 0x33, 0x37, 0x73, 0x06, 0x14, 0xC9, 0xEB, 0x2B, 0xEE, 0xA5, 0xB5, 0xD6, 0x83, 0xFF, 0x3D, 0x7D };
 void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 
-static uint8_t mydata[64] = "-1#-1#-1#-1";
 static osjob_t sendjob;
-
 void do_send(osjob_t* j);
 
 
@@ -106,6 +104,13 @@ UI ui;
 
 static osjob_t gpsjob;
 void gps_update(osjob_t* j);
+
+typedef struct {
+    float lat = -1.0;
+    float lng = -1.0;
+    uint8_t updated = 0;
+} gps_data_t;
+gps_data_t gps_reg;
 
 void onEvent (ev_t ev) {
     ev_state = ev;
@@ -189,8 +194,8 @@ void onEvent (ev_t ev) {
 
             // Schedule next transmission
             os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
-            // Schedule next transmission
-            os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(TX_INTERVAL-5), gps_update);
+            // Schedule gps update 1 second before next transmission
+            os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(TX_INTERVAL-1), gps_update);
             // Schedule display update
             os_setTimedCallback(&displayjob, os_getTime()+sec2osticks(2), display_update);
             break;
@@ -242,8 +247,22 @@ void do_send(osjob_t* j){
         Serial.println(F("OP_TXRXPEND, not sending"));
     } else {
         // Prepare upstream data transmission at the next possible time.
-        LMIC_setTxData2(10, mydata, strlen((char *)mydata), 1);
-        Serial.println(F("Packet queued"));
+        // There is no transmission if there is no gps data. Only display update.
+        if (gps_reg.updated) {
+            uint8_t mydata[64] = "-1#-1#-1#-1";
+            snprintf_P((char *)mydata, sizeof(mydata), (PGM_P)F("%d#%d#%.6f#%.6f"), 
+                                                                        LMIC.rssi, 
+                                                                        LMIC.snr, 
+                                                                        gps_reg.lat, 
+                                                                        gps_reg.lng);
+
+            Serial.println((char *)mydata);
+
+            LMIC_setTxData2(10, mydata, strlen((char *)mydata), 1);
+            Serial.println(F("Packet queued"));
+            
+            gps_reg.updated = 0;
+        }
     }
     // Next TX is scheduled after TX_COMPLETE event.
 }
@@ -287,16 +306,15 @@ void gps_update(osjob_t* j) {
         }
     }
 
-    snprintf((char *)mydata, sizeof(mydata), "%d#%d#%.6f#%.6f", LMIC.rssi, 
-                                                                LMIC.snr, 
-                                                                gps.location.lat(), 
-                                                                gps.location.lng());
-
-    Serial.println((char *)mydata);
-
     if (timeout_ok) {
+        gps_reg.lat = gps.location.lat();
+        gps_reg.lng = gps.location.lng();
+        gps_reg.updated = 1;
+
         ui.set_gps_status(UI_GPS_STATUS_DATA_TAKEN);
     } else {
+        gps_reg.updated = 0;
+        
         ui.set_gps_status(UI_GPS_STATUS_TIMEOUT);
     }
 }
