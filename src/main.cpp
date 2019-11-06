@@ -44,7 +44,7 @@
 
 #define GPS_RX_PIN  21
 #define GPS_TX_PIN  22
-#define GPS_UART_READ_TIMEOUT   5000
+#define GPS_UART_READ_TIMEOUT   10000
 
 HardwareSerial gps_serial(2);
 TinyGPSPlus gps;
@@ -206,8 +206,8 @@ void onEvent (ev_t ev) {
 
             // Schedule next transmission
             os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
-            // Schedule gps update 1 second before next transmission
-            os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(TX_INTERVAL-1), gps_update);
+            // Schedule gps update gps_read_timeout second before next transmission
+            os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(TX_INTERVAL-(GPS_UART_READ_TIMEOUT/1000)), gps_update);
             break;
         case EV_LOST_TSYNC:
             Serial.println(F("EV_LOST_TSYNC"));
