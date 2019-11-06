@@ -44,24 +44,10 @@
 
 #define GPS_RX_PIN  21
 #define GPS_TX_PIN  22
-#define GPS_UART_READ_TIMEOUT   10000
+#define GPS_UART_READ_TIMEOUT   10000 // must be less than TX period in secs
 
 HardwareSerial gps_serial(2);
 TinyGPSPlus gps;
-
-//
-// For normal use, we require that you edit the sketch to replace FILLMEIN
-// with values assigned by the TTN console. However, for regression tests,
-// we want to be able to compile these scripts. The regression tests define
-// COMPILE_REGRESSION_TEST, and in that case we define FILLMEIN to a non-
-// working but innocuous value.
-//
-#ifdef COMPILE_REGRESSION_TEST
-# define FILLMEIN 0
-#else
-# warning "You must replace the values marked FILLMEIN with real values from the TTN control panel!"
-# define FILLMEIN (#dont edit this, edit the lines that use FILLMEIN)
-#endif
 
 // This EUI must be in little-endian format, so least-significant-byte
 // first. When copying an EUI from ttnctl output, this means to reverse
@@ -70,14 +56,13 @@ TinyGPSPlus gps;
 static const u1_t PROGMEM APPEUI[8]={ 0x71, 0x4A, 0x02, 0xD0, 0x7E, 0xD5, 0xB3, 0x70 };
 void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
 
-// This should also be in little endian format, see above.
-static const u1_t PROGMEM DEVEUI[8]={ 0xA8, 0x34, 0x8C, 0xFE, 0xFF, 0xBF, 0x71, 0x3C };
-void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
+void get_eui64(uint8_t *eui);
+void os_getDevEui (u1_t* buf) { get_eui64((uint8_t *)buf); }
 
 // This key should be in big endian format (or, since it is not really a
 // number but a block of memory, endianness does not really apply). In
 // practice, a key taken from ttnctl can be copied as-is.
-static const u1_t PROGMEM APPKEY[16] = { 0x33, 0x37, 0x73, 0x06, 0x14, 0xC9, 0xEB, 0x2B, 0xEE, 0xA5, 0xB5, 0xD6, 0x83, 0xFF, 0x3D, 0x7D };
+static const u1_t PROGMEM APPKEY[16] = { 0x79, 0xE9, 0x8F, 0x21, 0xBC, 0x2C, 0x8F, 0xC2, 0xAB, 0xF3, 0x6E, 0x65, 0x43, 0x5D, 0x53, 0x9D };
 void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 
 static osjob_t sendjob;
@@ -235,10 +220,7 @@ void onEvent (ev_t ev) {
         */
         case EV_TXSTART:
             Serial.println(F("EV_TXSTART"));
-            if (LMIC.netid) {
-                // Schedule display update
-                ui.set_state(UI_STATE_TXSTART);
-            }
+            ui.set_state(UI_STATE_TXSTART);
             break;
         case EV_JOIN_TXCOMPLETE:
             Serial.println(F("EV_JOIN_TXCOMPLETE"));
@@ -296,6 +278,14 @@ void gps_update(osjob_t* j) {
         
         ui.set_gps_status(UI_GPS_STATUS_TIMEOUT);
     }
+}
+
+void get_eui64(uint8_t *eui) {
+    esp_efuse_mac_get_default(eui);
+    
+    memmove(&eui[5], &eui[3], 3);
+    eui[3] = 0xFF;
+    eui[4] = 0xFE;
 }
 
 void setup() {
