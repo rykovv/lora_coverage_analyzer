@@ -38,6 +38,9 @@
 #include <SPI.h>
 #include <WiFi.h>
 
+#include <esp_int_wdt.h>
+#include <esp_task_wdt.h>
+
 #include "ui.hpp"
 
 #include "TinyGPS++.h"
@@ -45,6 +48,7 @@
 #define GPS_RX_PIN  21
 #define GPS_TX_PIN  22
 #define GPS_UART_READ_TIMEOUT   10000 // must be less than TX period in secs
+#define GPS_TIMEOUT_CNT_MAX     5
 
 HardwareSerial gps_serial(2);
 TinyGPSPlus gps;
@@ -94,6 +98,10 @@ typedef struct {
 gps_data_t gps_reg;
 
 uint8_t joined = 0;
+
+uint8_t gps_timeout_cnt = 0;
+
+void hard_restart();
 
 void onEvent (ev_t ev) {
     Serial.print(os_getTime());
@@ -281,8 +289,14 @@ void gps_update(osjob_t* j) {
         gps_reg.lng = gps.location.lng();
         gps_reg.updated = 1;
 
+        gps_timeout_cnt = 0;
+
         ui.set_gps_status(UI_GPS_STATUS_DATA_TAKEN);
     } else {
+        gps_timeout_cnt++;
+        if (gps_timeout_cnt == GPS_TIMEOUT_CNT_MAX) {
+            hard_restart();
+        }
         gps_reg.updated = 0;
         
         ui.set_gps_status(UI_GPS_STATUS_TIMEOUT);
@@ -295,6 +309,12 @@ void get_eui64(uint8_t *eui) {
     memmove(&eui[5], &eui[3], 3);
     eui[3] = 0xFF;
     eui[4] = 0xFE;
+}
+
+void hard_restart() {
+    esp_task_wdt_init(1, true);
+    esp_task_wdt_add(NULL);
+    while(true);
 }
 
 void setup() {
