@@ -345,6 +345,8 @@ void setup() {
     LMIC_setupChannel(7, 867900000, DR_RANGE_MAP(DR_SF12, DR_SF7),  BAND_CENTI);      // g-band
     LMIC_setupChannel(8, 868800000, DR_RANGE_MAP(DR_FSK,  DR_FSK),  BAND_MILLI);      // g2-band
 
+    LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
+
     // Start job (sending automatically starts OTAA too)
     do_send(&sendjob);
 }
