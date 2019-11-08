@@ -68,6 +68,8 @@ void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 static osjob_t sendjob;
 void do_send(osjob_t* j);
 
+static osjob_t gpsjob;
+void gps_update(osjob_t* j);
 
 // Schedule TX every this many seconds (might become longer due to duty
 // cycle limitations).
@@ -83,9 +85,6 @@ const lmic_pinmap lmic_pins = {
 
 UI ui;
 
-static osjob_t gpsjob;
-void gps_update(osjob_t* j);
-
 typedef struct {
     float lat = -1.0;
     float lng = -1.0;
@@ -93,6 +92,8 @@ typedef struct {
     uint8_t sent = 0;
 } gps_data_t;
 gps_data_t gps_reg;
+
+uint8_t joined = 0;
 
 void onEvent (ev_t ev) {
     Serial.print(os_getTime());
@@ -138,6 +139,7 @@ void onEvent (ev_t ev) {
               }
               Serial.println("");
             }
+            joined = 1;
             // Disable link check validation (automatically enabled
             // during join, but because slow data rates change max TX
 	    // size, we don't use it in this example.
@@ -146,7 +148,7 @@ void onEvent (ev_t ev) {
             // Schedule display update
             ui.set_state(UI_STATE_JOINED);
             // Schedule GPS update
-            os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(1), gps_update);
+            // os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(1), gps_update);
             break;
         /*
         || This event is defined but not used in the code. No
@@ -167,12 +169,22 @@ void onEvent (ev_t ev) {
             if (LMIC.txrxFlags & TXRX_ACK) {
                 Serial.println(F("Received ack"));
                 ui.set_state(UI_STATE_ACK_RECEIVED);
+
                 if (gps_reg.sent) {
                     gps_reg.sent = 0;
                     ui.set_gps_status(UI_GPS_STATUS_CONFIRMED);
+                    
+                    os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
+                } else {
+                    // once periodic ack received -> get gps data and schedule send
+                    gps_update(&gpsjob);
+                    if (gps_reg.updated) {
+                        os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(1), do_send);
+                    }
                 }
             } else {
                 ui.set_state(UI_STATE_TXCOMPLETED);
+                
                 if (gps_reg.updated) {
                     gps_reg.sent = 1;
                     gps_reg.updated = 0;
@@ -188,11 +200,6 @@ void onEvent (ev_t ev) {
             }
 
             ui.set_signal_values(LMIC.rssi, LMIC.snr);
-
-            // Schedule next transmission
-            os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
-            // Schedule gps update gps_read_timeout second before next transmission
-            os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(TX_INTERVAL-(GPS_UART_READ_TIMEOUT/1000)), gps_update);
             break;
         case EV_LOST_TSYNC:
             Serial.println(F("EV_LOST_TSYNC"));
@@ -220,7 +227,9 @@ void onEvent (ev_t ev) {
         */
         case EV_TXSTART:
             Serial.println(F("EV_TXSTART"));
-            ui.set_state(UI_STATE_TXSTART);
+            if (joined) {
+                ui.set_state(UI_STATE_TXSTART);
+            }
             break;
         case EV_JOIN_TXCOMPLETE:
             Serial.println(F("EV_JOIN_TXCOMPLETE"));
