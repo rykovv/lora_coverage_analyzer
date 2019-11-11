@@ -1,5 +1,9 @@
 #include "ui.hpp"
 
+#define RSSI_HIGH       (30)
+#define RSSI_MEDIUM     (0)
+#define RSSI_LOW        (-20)
+
 typedef enum {
     UI_LORA_BAR_NO_SIGNAL = 0,
     UI_LORA_BAR_POOR_SIGNAL,
@@ -59,9 +63,9 @@ void UI::set_signal_values(int16_t rssi, int16_t snr) {
     }
     u8x8.draw1x2String(2, 4, vals);
 
-    if (rssi > 30) {
+    if (rssi > RSSI_HIGH) {
         _ui_set_lora_bar(UI_LORA_BAR_PERFECT_SIGNAL);
-    } else if (rssi > 20) {
+    } else if (rssi > RSSI_MEDIUM) {
         _ui_set_lora_bar(UI_LORA_BAR_GOOD_SIGNAL);
     } else {
         _ui_set_lora_bar(UI_LORA_BAR_POOR_SIGNAL);
