@@ -51,10 +51,23 @@ class UI {
     public :
         UI(void);
 
+        /**
+         * @desc sets state on user interface OLED display
+         * @param ui_state_t ui_state - [IN] - state
+        */
         void set_state(ui_state_t ui_state);
 
+        /**
+         * @desc sets network signal values on user interface OLED display
+         * @param int16_t rssi - [IN] - rssi value
+         * @param int16_t snr -  [IN] - snr (signal to noise ratio) value
+        */
         void set_signal_values(int16_t rssi, int16_t snr);
 
+        /**
+         * @desc sets GPS status on user interface OLED display
+         * @param ui_gps_status_t ui_gps_status - [IN] - GPS status
+        */
         void set_gps_status(ui_gps_status_t ui_gps_status);
 
     private :
