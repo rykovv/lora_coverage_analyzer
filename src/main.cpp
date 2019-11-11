@@ -125,8 +125,10 @@ void loop() {
 
 // LMiC onEvent redefinition
 void onEvent (ev_t ev) {
-    Serial.print(os_getTime());
-    Serial.print(": ");
+    if (CORE_DEBUG_LEVEL >= ARDUHAL_LOG_LEVEL_DEBUG) {
+        Serial.print(os_getTime());
+        Serial.print(F(": "));
+    }
     switch(ev) {
         case EV_SCAN_TIMEOUT:
             ESP_LOGD(TAG, "EV_SCAN_TIMEOUT");
@@ -138,81 +140,72 @@ void onEvent (ev_t ev) {
             ESP_LOGD(TAG, "EV_BEACON_MISSED");
             break;
         case EV_BEACON_TRACKED:
-            ESP_LOGD(TAG, EV_BEACON_TRACKED);
+            ESP_LOGD(TAG, "EV_BEACON_TRACKED");
             break;
         case EV_JOINING:
-            Serial.println(F("EV_JOINING"));
+            ESP_LOGD(TAG, "EV_JOINING");
             // Schedule display update
             ui.set_state(UI_STATE_JOINING);
             break;
         case EV_JOINED:
-            Serial.println(F("EV_JOINED"));
-            {
-              u4_t netid = 0;
-              devaddr_t devaddr = 0;
-              u1_t nwkKey[16];
-              u1_t artKey[16];
-              LMIC_getSessionKeys(&netid, &devaddr, nwkKey, artKey);
-              Serial.print(F("netid: "));
-              Serial.println(netid, DEC);
-              Serial.print(F("devaddr: "));
-              Serial.println(devaddr, HEX);
-              Serial.print(F("artKey: "));
-              for (size_t i=0; i<sizeof(artKey); ++i) {
-                Serial.print(artKey[i], HEX);
-              }
-              Serial.println("");
-              Serial.print("nwkKey: ");
-              for (size_t i=0; i<sizeof(nwkKey); ++i) {
-                Serial.print(nwkKey[i], HEX);
-              }
-              Serial.println("");
+            ESP_LOGD(TAG, "EV_JOINED");
+            if (CORE_DEBUG_LEVEL >= ARDUHAL_LOG_LEVEL_DEBUG) {
+                u4_t netid = 0;
+                devaddr_t devaddr = 0;
+                u1_t nwkKey[16];
+                u1_t artKey[16];
+                LMIC_getSessionKeys(&netid, &devaddr, nwkKey, artKey);
+                Serial.print(F("netid: "));
+                Serial.println(netid, DEC);
+                Serial.print(F("devaddr: "));
+                Serial.println(devaddr, HEX);
+                Serial.print(F("artKey: "));
+                for (size_t i=0; i<sizeof(artKey); ++i) {
+                    Serial.print(artKey[i], HEX);
+                }
+                Serial.println("");
+                Serial.print("nwkKey: ");
+                for (size_t i=0; i<sizeof(nwkKey); ++i) {
+                    Serial.print(nwkKey[i], HEX);
+                }
+                Serial.println("");
             }
             dev_joined = 1;
+            
             // Disable link check validation (automatically enabled
             // during join, but because slow data rates change max TX
-	    // size, we don't use it in this example.
+	        // size, we don't use it in this example.
             LMIC_setLinkCheckMode(0);
 
             // Schedule display update
             ui.set_state(UI_STATE_JOINED);
-            // Schedule GPS update
-            // os_setTimedCallback(&gpsjob, os_getTime()+sec2osticks(1), gps_update);
             break;
-        /*
-        || This event is defined but not used in the code. No
-        || point in wasting codespace on it.
-        ||
-        || case EV_RFU1:
-        ||     Serial.println(F("EV_RFU1"));
-        ||     break;
-        */
         case EV_JOIN_FAILED:
-            Serial.println(F("EV_JOIN_FAILED"));
+            ESP_LOGD(TAG, "EV_JOIN_FAILED");
             break;
         case EV_REJOIN_FAILED:
-            Serial.println(F("EV_REJOIN_FAILED"));
+            ESP_LOGD(TAG, "EV_REJOIN_FAILED");
             break;
         case EV_TXCOMPLETE:
-            Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
+            ESP_LOGD(TAG, "EV_TXCOMPLETE (includes waiting for RX windows)");
             if (LMIC.txrxFlags & TXRX_ACK) {
-                Serial.println(F("Received ACK"));
+                ESP_LOGD(TAG, "Received ACK");
                 ui.set_state(UI_STATE_ACK_RECEIVED);
 
                 if (gps_reg.sent) {
-                    Serial.println(F("GPS_CONFIRMED"));
+                    ESP_LOGV(TAG, "GPS_DATA_CONFIRMED");
                     gps_reg.sent = 0;
                     ui.set_gps_status(UI_GPS_STATUS_CONFIRMED);
                     
                     os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
                 } else {
-                    Serial.println(F("GPS not sent -> update"));
+                    ESP_LOGV(TAG, "GPS not sent -> update");
                     // once periodic ack received -> get gps data and schedule send
                     //   or if the gps has not been initialized, schedule the next try 
                     //   to at least update the display
                     gps_update(&gpsjob);
                     if (!gps_reg.func) {
-                        Serial.println(F("GPS data updated -> schedule send immediately"));
+                        ESP_LOGV(TAG, "GPS data updated -> schedule send immediately");
                         os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(1), do_send);
 
                         if (gps_reg.updated) {
@@ -227,50 +220,43 @@ void onEvent (ev_t ev) {
                 ui.set_state(UI_STATE_TXCOMPLETED);
             }
 
-            if (LMIC.dataLen) {
-                Serial.print(F("Received "));
-                Serial.print(LMIC.dataLen);
-                Serial.println(F(" bytes of payload"));
+            if (CORE_DEBUG_LEVEL >= ARDUHAL_LOG_LEVEL_DEBUG) {
+                if (LMIC.dataLen) {
+                    Serial.print(F("Received "));
+                    Serial.print(LMIC.dataLen);
+                    Serial.println(F(" bytes of payload"));
+                }
             }
 
             ui.set_signal_values(LMIC.rssi, LMIC.snr);
             break;
         case EV_LOST_TSYNC:
-            Serial.println(F("EV_LOST_TSYNC"));
+            ESP_LOGD(TAG, "EV_LOST_TSYNC");
             break;
         case EV_RESET:
-            Serial.println(F("EV_RESET"));
+            ESP_LOGD(TAG, "EV_RESET");
             break;
         case EV_RXCOMPLETE:
             // data received in ping slot
-            Serial.println(F("EV_RXCOMPLETE"));
+            ESP_LOGD(TAG, "EV_RXCOMPLETE");
             break;
         case EV_LINK_DEAD:
-            Serial.println(F("EV_LINK_DEAD"));
+            ESP_LOGD(TAG, "EV_LINK_DEAD");
             break;
         case EV_LINK_ALIVE:
-            Serial.println(F("EV_LINK_ALIVE"));
+            ESP_LOGD(TAG, "EV_LINK_ALIVE");
             break;
-        /*
-        || This event is defined but not used in the code. No
-        || point in wasting codespace on it.
-        ||
-        || case EV_SCAN_FOUND:
-        ||    Serial.println(F("EV_SCAN_FOUND"));
-        ||    break;
-        */
         case EV_TXSTART:
-            Serial.println(F("EV_TXSTART"));
+            ESP_LOGD(TAG, "EV_TXSTART");
             if (dev_joined) {
                 ui.set_state(UI_STATE_TXSTART);
             }
             break;
         case EV_JOIN_TXCOMPLETE:
-            Serial.println(F("EV_JOIN_TXCOMPLETE"));
+            ESP_LOGD(TAG, "EV_JOIN_TXCOMPLETE");
             break;
         default:
-            Serial.print(F("Unknown event: "));
-            Serial.println((unsigned) ev);
+            ESP_LOGD(TAG, "Unknown event: %u", (unsigned) ev);
             break;
     }
 }
@@ -278,7 +264,7 @@ void onEvent (ev_t ev) {
 void do_send(osjob_t* j){
     // Check if there is not a current TX/RX job running
     if (LMIC.opmode & OP_TXRXPEND) {
-        Serial.println(F("OP_TXRXPEND, not sending"));
+        ESP_LOGW(TAG, "OP_TXRXPEND, not sending");
     } else {
         // Prepare upstream data transmission at the next possible time.
         uint8_t mydata[64] = "-1#-1#-1#-1";
@@ -293,7 +279,7 @@ void do_send(osjob_t* j){
         }
         //              port                                ack required
         LMIC_setTxData2(10, mydata, strlen((char *)mydata), 1);
-        Serial.println(F("Packet queued"));
+        ESP_LOGD(TAG, "Packet queued");
     }
     // Next TX is scheduled after TX_COMPLETE event.
 }
@@ -324,6 +310,7 @@ void gps_update(osjob_t* j) {
         if (gps_reg.timeout_cnt == GPS_TIMEOUT_CNT_MAX) {
             hard_restart();
         }
+
         gps_reg.updated = 0;
         gps_reg.func = 0;
         
