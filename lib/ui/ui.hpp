@@ -1,3 +1,13 @@
+/**
+ * Universidad Jaume I. Departamento de Ingenieria y Ciencia de Computadores.
+ * High-Performance Computing and Architectures (HPCA) Research Group.
+ * 
+ * File: ui.hpp
+ * Purpose: User interface library header
+ * 
+ * @author Vladislav Rykov
+ * @version 1.0 11/11/19 
+**/
 #ifndef __UI__HPP__
 #define __UI__HPP__
 

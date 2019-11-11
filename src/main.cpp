@@ -5,7 +5,7 @@
  * File: main.cpp
  * Purpose: Firmware which implements main behaviour and functionality of the device.
  * 
- * @author and Vladislav Rykov
+ * @author Vladislav Rykov
  * @version 1.0 11/11/19 
 **/
 #include <Arduino.h>

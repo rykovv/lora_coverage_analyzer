@@ -1,3 +1,14 @@
+/**
+ * Universidad Jaume I. Departamento de Ingenieria y Ciencia de Computadores.
+ * High-Performance Computing and Architectures (HPCA) Research Group.
+ * 
+ * File: ui.cpp
+ * Purpose: User interface library implementation
+ * 
+ * @author Vladislav Rykov
+ * @version 1.0 11/11/19 
+**/
+
 #include "ui.hpp"
 
 #define RSSI_HIGH       (30)
@@ -67,8 +78,10 @@ void UI::set_signal_values(int16_t rssi, int16_t snr) {
         _ui_set_lora_bar(UI_LORA_BAR_PERFECT_SIGNAL);
     } else if (rssi > RSSI_MEDIUM) {
         _ui_set_lora_bar(UI_LORA_BAR_GOOD_SIGNAL);
-    } else {
+    } else if (rssi > RSSI_LOW) {
         _ui_set_lora_bar(UI_LORA_BAR_POOR_SIGNAL);
+    } else {
+        _ui_set_lora_bar(UI_LORA_BAR_NO_SIGNAL);
     }
 }
 
