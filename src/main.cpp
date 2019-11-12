@@ -68,8 +68,6 @@ typedef struct {
     float lat = -1.0;
     float lng = -1.0;
     uint8_t updated = 0;
-    uint8_t sent = 0;
-    uint8_t func = 0; // indicates if the device is functional
     uint8_t timeout_cnt = 0;
 } gps_data_t;
 gps_data_t gps_reg;
@@ -79,6 +77,13 @@ uint8_t dev_joined = 0;
 
 // function to restart completely the mcu hardware
 void hard_restart();
+
+// device state
+typedef enum {
+    DEV_STATE_PERIODIC_SEND = 0,
+    DEV_STATE_GPS_DATA_SEND,
+} dev_state_t;
+dev_state_t dev_state = DEV_STATE_PERIODIC_SEND;
 
 /************************ SETUP ************************/
 
@@ -192,31 +197,31 @@ void onEvent (ev_t ev) {
                 ESP_LOGD(TAG, "Received ACK");
                 ui.set_state(UI_STATE_ACK_RECEIVED);
 
-                if (gps_reg.sent) {
+                if (dev_state == DEV_STATE_GPS_DATA_SEND) {
                     ESP_LOGV(TAG, "GPS_DATA_CONFIRMED");
-                    gps_reg.sent = 0;
                     ui.set_gps_status(UI_GPS_STATUS_CONFIRMED);
                     
+                    dev_state = DEV_STATE_PERIODIC_SEND;
                     os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
-                } else {
+                } else if (dev_state == DEV_STATE_PERIODIC_SEND) {
                     ESP_LOGV(TAG, "GPS not sent -> update");
                     // once periodic ack received -> get gps data and schedule send
                     //   or if the gps has not been initialized, schedule the next try 
                     //   to at least update the display
                     gps_update(&gpsjob);
-                    if (!gps_reg.func) {
+                    if (gps_reg.updated) {
                         ESP_LOGV(TAG, "GPS data updated -> schedule send immediately");
+                        dev_state = DEV_STATE_GPS_DATA_SEND;
                         os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(1), do_send);
-
-                        if (gps_reg.updated) {
-                            gps_reg.sent = 1;
-                            gps_reg.updated = 0;
-
-                            ui.set_gps_status(UI_GPS_STATUS_SENT);
-                        }
+                    } else {
+                        dev_state = DEV_STATE_PERIODIC_SEND;
+                        os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
                     }
                 }
             } else {
+                ESP_LOGV(TAG, "schedule next periodic send");
+                os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
+                
                 ui.set_state(UI_STATE_TXCOMPLETED);
             }
 
@@ -268,14 +273,16 @@ void do_send(osjob_t* j){
     } else {
         // Prepare upstream data transmission at the next possible time.
         uint8_t mydata[64] = "-1#-1#-1#-1";
-        if (gps_reg.updated) {
+        if (gps_reg.updated && dev_state == DEV_STATE_GPS_DATA_SEND) {
             snprintf_P((char *)mydata, sizeof(mydata), (PGM_P)F("%d#%d#%.6f#%.6f"), 
                                                                         LMIC.rssi, 
                                                                         LMIC.snr, 
                                                                         gps_reg.lat, 
                                                                         gps_reg.lng);
 
-            Serial.println((char *)mydata);
+            ESP_LOGD(TAG, "GPS DATA : %s", (char *)mydata);
+            ui.set_gps_status(UI_GPS_STATUS_SENT);
+            gps_reg.updated = 0;
         }
         //              port                                ack required
         LMIC_setTxData2(10, mydata, strlen((char *)mydata), 1);
@@ -302,7 +309,6 @@ void gps_update(osjob_t* j) {
         gps_reg.updated = 1;
 
         gps_reg.timeout_cnt = 0;
-        gps_reg.func = 1;
 
         ui.set_gps_status(UI_GPS_STATUS_DATA_TAKEN);
     } else {
@@ -312,7 +318,6 @@ void gps_update(osjob_t* j) {
         }
 
         gps_reg.updated = 0;
-        gps_reg.func = 0;
         
         ui.set_gps_status(UI_GPS_STATUS_TIMEOUT);
     }
