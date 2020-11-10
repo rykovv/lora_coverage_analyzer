@@ -1,12 +1,12 @@
 /**
  * Universidad Jaume I. Departamento de Ingenieria y Ciencia de Computadores.
  * High-Performance Computing and Architectures (HPCA) Research Group.
- * 
+ *
  * File: main.cpp
  * Purpose: Firmware which implements main behaviour and functionality of the device.
- * 
+ *
  * @author Vladislav Rykov
- * @version 1.0 11/11/19 
+ * @version 1.0 11/11/19
 **/
 #include <Arduino.h>
 #include <Wire.h>
@@ -42,7 +42,7 @@ void get_eui64(uint8_t *eui);
 void os_getDevEui (u1_t* buf) { get_eui64((uint8_t *)buf); }
 
 // TTN APP KEY copied as is from the TTN application console
-static const u1_t PROGMEM APPKEY[16] = { 0x79, 0xE9, 0x8F, 0x21, 0xBC, 0x2C, 0x8F, 0xC2, 0xAB, 0xF3, 0x6E, 0x65, 0x43, 0x5D, 0x53, 0x9D };
+static const u1_t PROGMEM APPKEY[16] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F };
 void os_getDevKey (u1_t* buf) {  memcpy_P(buf, APPKEY, 16);}
 
 // Jobs definition
@@ -176,7 +176,7 @@ void onEvent (ev_t ev) {
                 Serial.println("");
             }
             dev_joined = 1;
-            
+
             // Disable link check validation (automatically enabled
             // during join, but because slow data rates change max TX
 	        // size, we don't use it in this example.
@@ -200,13 +200,13 @@ void onEvent (ev_t ev) {
                 if (dev_state == DEV_STATE_GPS_DATA_SEND) {
                     ESP_LOGV(TAG, "GPS_DATA_CONFIRMED");
                     ui.set_gps_status(UI_GPS_STATUS_CONFIRMED);
-                    
+
                     dev_state = DEV_STATE_PERIODIC_SEND;
                     os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
                 } else if (dev_state == DEV_STATE_PERIODIC_SEND) {
                     ESP_LOGV(TAG, "GPS not sent -> update");
                     // once periodic ack received -> get gps data and schedule send
-                    //   or if the gps has not been initialized, schedule the next try 
+                    //   or if the gps has not been initialized, schedule the next try
                     //   to at least update the display
                     gps_update(&gpsjob);
                     if (gps_reg.updated) {
@@ -221,7 +221,7 @@ void onEvent (ev_t ev) {
             } else {
                 ESP_LOGV(TAG, "schedule next periodic send");
                 os_setTimedCallback(&sendjob, os_getTime()+sec2osticks(TX_INTERVAL), do_send);
-                
+
                 ui.set_state(UI_STATE_TXCOMPLETED);
             }
 
@@ -274,10 +274,10 @@ void do_send(osjob_t* j){
         // Prepare upstream data transmission at the next possible time.
         uint8_t mydata[64] = "-1#-1#-1#-1";
         if (gps_reg.updated && dev_state == DEV_STATE_GPS_DATA_SEND) {
-            snprintf_P((char *)mydata, sizeof(mydata), (PGM_P)F("%d#%d#%.6f#%.6f"), 
-                                                                        LMIC.rssi, 
-                                                                        LMIC.snr, 
-                                                                        gps_reg.lat, 
+            snprintf_P((char *)mydata, sizeof(mydata), (PGM_P)F("%d#%d#%.6f#%.6f"),
+                                                                        LMIC.rssi,
+                                                                        LMIC.snr,
+                                                                        gps_reg.lat,
                                                                         gps_reg.lng);
 
             ESP_LOGD(TAG, "GPS DATA : %s", (char *)mydata);
@@ -318,14 +318,14 @@ void gps_update(osjob_t* j) {
         }
 
         gps_reg.updated = 0;
-        
+
         ui.set_gps_status(UI_GPS_STATUS_TIMEOUT);
     }
 }
 
 void get_eui64(uint8_t *eui) {
     esp_efuse_mac_get_default(eui);
-    
+
     memmove(&eui[5], &eui[3], 3);
     eui[3] = 0xFF;
     eui[4] = 0xFE;
